@@ -6,6 +6,7 @@ import com.event.eventscheduler.dto.request.SingleEventRequest;
 import com.event.eventscheduler.dto.response.EventResponse;
 import com.event.eventscheduler.entity.Event;
 import com.event.eventscheduler.entity.RecurrenceRule;
+import com.event.eventscheduler.exception.ScheduleConflictException;
 import com.event.eventscheduler.mapper.EventMapper;
 import com.event.eventscheduler.mapper.RecurrenceRuleMapper;
 import com.event.eventscheduler.repository.EventRepository;
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -139,6 +141,65 @@ public class EventServiceTest {
         verify(eventRepository, times(1)).findByStartDateBetween(eq(startOfDay), any(LocalDateTime.class));
 
         verify(eventMapper, times(1)).toResponse(any(Event.class));
+    }
+
+    @Test
+    void addSingleEvent_ShouldThrow_ScheduleConflictException() {
+        // Arrange
+        List<Event> conflictingEvents = Collections.singletonList(
+                new Event(10L, "Conflicting Meeting", LocalDateTime.now(), LocalDateTime.now().plusHours(1), null)
+        );
+
+        when(eventRepository.findByEndDateAfterAndStartDateBefore(
+                singleRequest.getStartDate(),
+                singleRequest.getEndDate()))
+                .thenReturn(conflictingEvents);
+
+        // Act & Assert
+        assertThrows(ScheduleConflictException.class, () -> {
+            eventService.addSingleEvent(singleRequest);
+        });
+
+        verify(eventRepository, never()).save(any(Event.class));
+
+        verify(eventMapper, never()).toResponse(any(Event.class));
+    }
+
+    @Test
+    void addCyclicEvent_ShouldThrow_ScheduleConflictException() {
+        // Arrange
+        LocalDate today = LocalDate.now();
+        LocalDate repeatUntil = today.plusWeeks(3);
+
+        RecurrenceRuleRequest ruleRequest = new RecurrenceRuleRequest(
+                today.getDayOfWeek(), repeatUntil, today.atTime(10, 0).toLocalTime(), today.atTime(11, 0).toLocalTime()
+        );
+        CyclicEventRequest cyclicRequest = new CyclicEventRequest(
+                "Cyclic Test", ruleRequest.getStartTime(), ruleRequest.getEndTime(), ruleRequest
+        );
+
+        RecurrenceRule ruleEntity = new RecurrenceRule(1L, today.getDayOfWeek(), repeatUntil, ruleRequest.getStartTime(), ruleRequest.getEndTime());
+
+        List<Event> conflictingEvents = Collections.singletonList(
+                new Event(10L, "Conflict", LocalDateTime.now(), LocalDateTime.now().plusHours(1), null)
+        );
+
+        // Mock
+        when(recurrenceRuleMapper.toEntity(ruleRequest)).thenReturn(ruleEntity);
+        when(recurrenceRuleRepository.save(ruleEntity)).thenReturn(ruleEntity);
+
+        when(eventRepository.findByEndDateAfterAndStartDateBefore(any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(conflictingEvents);
+
+        // Act & Assert
+        assertThrows(ScheduleConflictException.class, () -> {
+            eventService.addCyclicEvent(cyclicRequest);
+        });
+
+        verify(eventRepository, never()).saveAll(anyList());
+        verify(recurrenceRuleRepository, times(1)).save(ruleEntity);
+        verify(eventRepository, atLeastOnce()).findByEndDateAfterAndStartDateBefore(any(LocalDateTime.class), any(LocalDateTime.class));
+
     }
 
 }
