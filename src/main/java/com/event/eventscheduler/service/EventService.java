@@ -5,6 +5,7 @@ import com.event.eventscheduler.dto.request.SingleEventRequest;
 import com.event.eventscheduler.dto.response.EventResponse;
 import com.event.eventscheduler.entity.Event;
 import com.event.eventscheduler.entity.RecurrenceRule;
+import com.event.eventscheduler.exception.ScheduleConflictException;
 import com.event.eventscheduler.mapper.EventMapper;
 import com.event.eventscheduler.mapper.RecurrenceRuleMapper;
 import com.event.eventscheduler.repository.EventRepository;
@@ -31,6 +32,8 @@ public class EventService {
 
     @Transactional
     public EventResponse addSingleEvent(SingleEventRequest request) {
+        checkForConflict(request.getStartDate(), request.getEndDate());
+
         if (request == null) {
             throw new IllegalArgumentException("Event request cannot be null");
         }
@@ -47,6 +50,10 @@ public class EventService {
         rule = recurrenceRuleRepository.save(rule);
 
         List<Event> events = generateEventsFromRule(rule, request.getTitle());
+
+        for (Event event : events) {
+            checkForConflict(event.getStartDate(), event.getEndDate());
+        }
 
         List<Event> savedEvents = eventRepository.saveAll(events);
 
@@ -113,5 +120,17 @@ public class EventService {
         return events.stream()
                 .map(eventMapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void checkForConflict(LocalDateTime newStart, LocalDateTime newEnd) {
+        List<Event> conflicts = eventRepository.findByEndDateAfterAndStartDateBefore(
+                newStart,
+                newEnd
+        );
+
+        if (!conflicts.isEmpty()) {
+            throw new ScheduleConflictException("Schedule conflict detected. The proposed event time overlaps with existing appointments.");
+        }
     }
 }
