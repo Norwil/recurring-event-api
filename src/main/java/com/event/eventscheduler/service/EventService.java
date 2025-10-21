@@ -1,10 +1,12 @@
 package com.event.eventscheduler.service;
 
 import com.event.eventscheduler.dto.request.CyclicEventRequest;
+import com.event.eventscheduler.dto.request.EventUpdateRequest;
 import com.event.eventscheduler.dto.request.SingleEventRequest;
 import com.event.eventscheduler.dto.response.EventResponse;
 import com.event.eventscheduler.entity.Event;
 import com.event.eventscheduler.entity.RecurrenceRule;
+import com.event.eventscheduler.exception.ResourceNotFoundException;
 import com.event.eventscheduler.exception.ScheduleConflictException;
 import com.event.eventscheduler.mapper.EventMapper;
 import com.event.eventscheduler.mapper.RecurrenceRuleMapper;
@@ -32,11 +34,7 @@ public class EventService {
 
     @Transactional
     public EventResponse addSingleEvent(SingleEventRequest request) {
-        checkForConflict(request.getStartDate(), request.getEndDate());
-
-        if (request == null) {
-            throw new IllegalArgumentException("Event request cannot be null");
-        }
+        checkForConflict(request.getStartDate(), request.getEndDate(), null);
 
         Event eventToAdd = eventMapper.toEntity(request);
         Event savedEvent = eventRepository.save(eventToAdd);
@@ -52,7 +50,7 @@ public class EventService {
         List<Event> events = generateEventsFromRule(rule, request.getTitle());
 
         for (Event event : events) {
-            checkForConflict(event.getStartDate(), event.getEndDate());
+            checkForConflict(event.getStartDate(), event.getEndDate(), null);
         }
 
         List<Event> savedEvents = eventRepository.saveAll(events);
@@ -60,16 +58,14 @@ public class EventService {
         return savedEvents.stream()
                 .map(eventMapper::toResponse)
                 .collect(Collectors.toList());
-
     }
 
     private List<Event> generateEventsFromRule(RecurrenceRule rule, String title) {
         List<Event> events = new ArrayList<>();
-
         LocalDate today = LocalDate.now();
         LocalDate endExclusive = rule.getRepeatUntilDate() != null
-                                ? rule.getRepeatUntilDate().plusDays(1)
-                                : today.plusYears(1); // Define a max limit for "FOREVER"
+                ? rule.getRepeatUntilDate().plusDays(1)
+                : today.plusYears(1);
 
         int eventCount = 0;
         final int MAX_EVENTS = 1000;
@@ -86,7 +82,6 @@ public class EventService {
                 LocalDateTime startDateTime = LocalDateTime.of(date, rule.getStartTime());
                 LocalDateTime endDateTime = LocalDateTime.of(date, rule.getEndTime());
 
-                // Create the concrete event entity
                 Event event = new Event();
                 event.setTitle(title);
                 event.setStartDate(startDateTime);
@@ -123,11 +118,36 @@ public class EventService {
     }
 
     @Transactional
-    public void checkForConflict(LocalDateTime newStart, LocalDateTime newEnd) {
-        List<Event> conflicts = eventRepository.findByEndDateAfterAndStartDateBefore(
-                newStart,
-                newEnd
-        );
+    public EventResponse updateSingleEvent(EventUpdateRequest request) {
+        Event existingEvent = eventRepository.findById(request.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with ID: " + request.getId()));
+
+        if (existingEvent.getRecurrenceRule() != null) {
+            throw new IllegalArgumentException("Cannot update a recurring event using the single event endpoint.");
+        }
+
+        checkForConflict(request.getStartDate(), request.getEndDate(), request.getId());
+
+        // Apply Updates
+        existingEvent.setTitle(request.getTitle());
+        existingEvent.setStartDate(request.getStartDate());
+        existingEvent.setEndDate(request.getEndDate());
+
+        Event updatedEvent = eventRepository.save(existingEvent);
+
+        return eventMapper.toResponse(updatedEvent);
+    }
+
+    @Transactional(readOnly = true)
+    protected void checkForConflict(LocalDateTime newStart, LocalDateTime newEnd, Long eventIdToExclude) {
+        List<Event> conflicts;
+
+        if (eventIdToExclude != null) {
+            conflicts = eventRepository.findConflictingEventsExcludingId(newStart, newEnd, eventIdToExclude);
+        } else {
+            // New event check
+            conflicts = eventRepository.findByEndDateAfterAndStartDateBefore(newStart, newEnd);
+        }
 
         if (!conflicts.isEmpty()) {
             throw new ScheduleConflictException("Schedule conflict detected. The proposed event time overlaps with existing appointments.");
