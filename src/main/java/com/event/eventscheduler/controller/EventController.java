@@ -1,6 +1,7 @@
 package com.event.eventscheduler.controller;
 
 import com.event.eventscheduler.dto.request.CyclicEventRequest;
+import com.event.eventscheduler.dto.request.EventUpdateRequest;
 import com.event.eventscheduler.dto.request.SingleEventRequest;
 import com.event.eventscheduler.dto.response.EventResponse;
 import com.event.eventscheduler.service.EventService;
@@ -42,6 +43,18 @@ public class EventController {
     @GetMapping("/all")
     public ResponseEntity<List<EventResponse>> findAll() {
         List<EventResponse> response = eventService.findAll();
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<EventResponse> updateSingleEvent(
+            @PathVariable Long id,
+            @RequestBody EventUpdateRequest request) {
+        if (!id.equals(request.getId())) {
+            throw new IllegalArgumentException("Path ID must match request body ID.");
+        }
+
+        EventResponse response = eventService.updateSingleEvent(request);
         return ResponseEntity.ok(response);
     }
 
