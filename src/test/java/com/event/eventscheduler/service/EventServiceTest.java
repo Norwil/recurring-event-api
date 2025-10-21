@@ -1,11 +1,13 @@
 package com.event.eventscheduler.service;
 
 import com.event.eventscheduler.dto.request.CyclicEventRequest;
+import com.event.eventscheduler.dto.request.EventUpdateRequest;
 import com.event.eventscheduler.dto.request.RecurrenceRuleRequest;
 import com.event.eventscheduler.dto.request.SingleEventRequest;
 import com.event.eventscheduler.dto.response.EventResponse;
 import com.event.eventscheduler.entity.Event;
 import com.event.eventscheduler.entity.RecurrenceRule;
+import com.event.eventscheduler.exception.ResourceNotFoundException;
 import com.event.eventscheduler.exception.ScheduleConflictException;
 import com.event.eventscheduler.mapper.EventMapper;
 import com.event.eventscheduler.mapper.RecurrenceRuleMapper;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
@@ -200,6 +203,108 @@ public class EventServiceTest {
         verify(recurrenceRuleRepository, times(1)).save(ruleEntity);
         verify(eventRepository, atLeastOnce()).findByEndDateAfterAndStartDateBefore(any(LocalDateTime.class), any(LocalDateTime.class));
 
+    }
+
+    @Test
+    void updateSingleEvent_ShouldUpdateEvent_WhenNoConflict() {
+        // Arrange
+        Long eventId = 1L;
+
+        EventUpdateRequest updateRequest = new EventUpdateRequest();
+        updateRequest.setId(eventId);
+        updateRequest.setTitle("Updated Title");
+        updateRequest.setStartDate(LocalDateTime.now().plusDays(1));
+        updateRequest.setEndDate(LocalDateTime.now().plusDays(1).plusHours(2));
+
+        eventEntity.setId(eventId);
+
+        Event updatedEntity = new Event(
+                eventId,
+                updateRequest.getTitle(),
+                updateRequest.getStartDate(),
+                updateRequest.getEndDate(),
+                null
+        );
+
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(eventEntity));
+
+        when(eventRepository.findConflictingEventsExcludingId(
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
+                eq(eventId)))
+                .thenReturn(Collections.emptyList());
+
+        when(eventRepository.save(any(Event.class))).thenReturn(updatedEntity);
+
+        when(eventMapper.toResponse(any(Event.class))).thenReturn(
+                new EventResponse(
+                        eventId, "Updated Title", updateRequest.getStartDate(), updateRequest.getEndDate(), null
+                )
+        );
+
+        // Act
+        eventService.updateSingleEvent(updateRequest);
+
+        // Assert
+        verify(eventRepository, times(1)).findConflictingEventsExcludingId(
+                updateRequest.getStartDate(), updateRequest.getEndDate(), eventId
+        );
+
+        verify(eventRepository, times(1)).save(any(Event.class));
+    }
+
+    @Test
+    void updateSingleEvent_ShouldThrowConflictException_WhenOverlapExists() {
+        // Arrange
+        Long eventId = 1L;
+
+        LocalDateTime testStart = LocalDateTime.now().plusHours(1);
+        LocalDateTime testEnd = testStart.plusHours(2);
+
+        EventUpdateRequest updateRequest = new EventUpdateRequest();
+        updateRequest.setId(eventId);
+        updateRequest.setTitle("Updated Title");
+        updateRequest.setStartDate(testStart);
+        updateRequest.setEndDate(testEnd);
+
+        eventEntity.setId(eventId);
+        when(eventRepository.findById(eventId)).thenReturn(Optional.of(eventEntity));
+
+        List<Event> conflicts = Collections.singletonList(
+                new Event(5L, "Existing Conflict", testStart.minusMinutes(30), testEnd.plusMinutes(30), null)
+        );
+
+        when(eventRepository.findConflictingEventsExcludingId(
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
+                eq(eventId)))
+                .thenReturn(conflicts);
+
+        // Act & Assert
+        assertThrows(ScheduleConflictException.class, () -> {
+            eventService.updateSingleEvent(updateRequest);
+        });
+
+        verify(eventRepository, never()).save(any(Event.class));
+    }
+
+    @Test
+    void updateSingleEvent_ShouldThrowNotFoundException_WhenEventDoesNotExist() {
+        // Arrange
+        Long nonExistentId = 99L;
+
+        EventUpdateRequest updateRequest = new EventUpdateRequest();
+        updateRequest.setId(nonExistentId);
+
+        when(eventRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(ResourceNotFoundException.class, () -> {
+            eventService.updateSingleEvent(updateRequest);
+        });
+
+        verify(eventRepository, never()).findConflictingEventsExcludingId(any(), any(), any());
+        verify(eventRepository, never()).save(any());
     }
 
 }
