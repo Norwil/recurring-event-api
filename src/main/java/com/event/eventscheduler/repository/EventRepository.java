@@ -14,7 +14,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     List<Event> findByStartDateBetween(LocalDateTime startBoundary, LocalDateTime endBoundary);
 
-    // This method is used for ADDING new events (no ID to exclude)
     List<Event> findByEndDateAfterAndStartDateBefore(
             LocalDateTime newStart,
             LocalDateTime newEnd
