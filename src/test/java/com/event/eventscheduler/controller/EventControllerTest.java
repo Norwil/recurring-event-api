@@ -122,7 +122,11 @@ class EventControllerTest {
     void updateSingleEvent_ShouldReturn_404NotFound_WhenIdMissing() throws Exception {
         // Arrange
         Long nonExistentId = 99L;
-        EventUpdateRequest updateRequest = new EventUpdateRequest(nonExistentId, "Test", testStart, testEnd);
+        EventUpdateRequest updateRequest = new EventUpdateRequest();
+        updateRequest.setId(nonExistentId);
+        updateRequest.setTitle("Test");
+        updateRequest.setStartDate(testStart);
+        updateRequest.setEndDate(testEnd);
 
         when(eventService.updateSingleEvent(any(EventUpdateRequest.class)))
                 .thenThrow(new ResourceNotFoundException("Event not found."));
