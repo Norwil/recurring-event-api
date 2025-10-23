@@ -34,7 +34,12 @@ public class EventMapper {
         response.setTitle(event.getTitle());
         response.setStartDate(event.getStartDate());
         response.setEndDate(event.getEndDate());
-        response.setRuleId(event.getRecurrenceRule().getId());
+
+        Long ruleId = (event.getRecurrenceRule() != null)
+                ? event.getRecurrenceRule().getId()
+                : null;
+
+        response.setRuleId(ruleId);
 
         return response;
     }
