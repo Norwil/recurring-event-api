@@ -47,6 +47,7 @@ application*.properties
 application*.yml
 application*.yaml
 
+
 # Local configuration files
 *.properties
 !gradle-wrapper.properties
@@ -77,4 +78,7 @@ docker-compose.override.yml
 
 # Local development
 src/main/resources/application-*.yml
-#!src/main/resources/application.yml
+
+# System / Misc
+.DS_Store
+Thumbs.db
