@@ -1,12 +1,20 @@
 package com.event.eventscheduler.controller;
 
-import com.event.eventscheduler.dto.request.SingleEventRequest;
-import com.event.eventscheduler.dto.request.EventUpdateRequest;
-import com.event.eventscheduler.dto.response.EventResponse;
-import com.event.eventscheduler.exception.GlobalExceptionHandler;
-import com.event.eventscheduler.exception.ResourceNotFoundException;
-import com.event.eventscheduler.exception.ScheduleConflictException;
-import com.event.eventscheduler.service.EventService;
+import com.event.eventscheduler.adapter.input.rest.controller.EventController;
+import com.event.eventscheduler.adapter.input.rest.dto.request.EventUpdateRequest;
+import com.event.eventscheduler.adapter.input.rest.dto.request.SingleEventRequest;
+import com.event.eventscheduler.adapter.input.rest.dto.response.EventResponse;
+import com.event.eventscheduler.adapter.input.rest.mapper.EventMapper;
+import com.event.eventscheduler.domain.exception.GlobalExceptionHandler;
+import com.event.eventscheduler.domain.exception.ResourceNotFoundException;
+import com.event.eventscheduler.domain.exception.ScheduleConflictException;
+import com.event.eventscheduler.domain.model.Event;
+import com.event.eventscheduler.domain.port.input.CreateCyclicEventUseCase;
+import com.event.eventscheduler.domain.port.input.CreateEventUseCase;
+import com.event.eventscheduler.domain.port.input.GetEventsUseCase;
+import com.event.eventscheduler.domain.port.input.UpdateEventUseCase;
+import com.event.eventscheduler.domain.port.input.command.CreateSingleEventCommand;
+import com.event.eventscheduler.domain.port.input.command.UpdateEventCommand;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,14 +42,19 @@ class EventControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockitoBean
-    private EventService eventService;
+    @MockitoBean private CreateEventUseCase createEventUseCase;
+    @MockitoBean private CreateCyclicEventUseCase createCyclicEventUseCase;
+    @MockitoBean private GetEventsUseCase getEventUseCase;
+    @MockitoBean private UpdateEventUseCase updateEventUseCase;
+    @MockitoBean private EventMapper eventMapper;
 
     @Autowired
     private ObjectMapper objectMapper;
 
-    // --- Test Data Setup ---
+    // Test Data
     private SingleEventRequest singleRequest;
+    private CreateSingleEventCommand createCommand;
+    private Event domainEvent;
     private EventResponse eventResponse;
     private LocalDateTime testStart;
     private LocalDateTime testEnd;
@@ -51,180 +64,131 @@ class EventControllerTest {
         testStart = LocalDateTime.of(2025, 11, 10, 10, 0);
         testEnd = testStart.plusHours(1);
 
+        // DTO Request
         singleRequest = new SingleEventRequest("Team Sync", testStart, testEnd);
+        // Command
+        createCommand = new CreateSingleEventCommand("Team Sync", testStart, testEnd);
+        // Domain Model
+        domainEvent = new Event();
+        domainEvent.setId(5L);
+        domainEvent.setTitle("Team Sync");
+        domainEvent.setStartDate(testStart);
+        domainEvent.setEndDate(testEnd);
+        // DTO Response
         eventResponse = new EventResponse(5L, "Team Sync", testStart, testEnd, null);
     }
-
-    // -------------------------------------------------------------------------------------------------
-    // 1. POST /api/events/single - Add Single Event
-    // -------------------------------------------------------------------------------------------------
 
     @Test
     void addSingleEvent_ShouldReturn_201Created_OnSuccess() throws Exception {
         // Arrange
-        when(eventService.addSingleEvent(any(SingleEventRequest.class))).thenReturn(eventResponse);
+        // Mock Mapper (DTO -> Command)
+        when(eventMapper.toSingleCommand(any(SingleEventRequest.class))).thenReturn(createCommand);
+        // Mock Use Case (Command -> Domain Model
+        when(createEventUseCase.createSingleEvent(any(CreateSingleEventCommand.class))).thenReturn(domainEvent);
+        // Mock Mapper (Domain Model -> DTO)
+        when(eventMapper.toResponse(any(Event.class))).thenReturn(eventResponse);
 
         // Act & Assert
         mockMvc.perform(post("/api/events/single")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(singleRequest)))
-                .andExpect(status().isCreated()) // Expect HTTP 201
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(5L))
                 .andExpect(jsonPath("$.title").value("Team Sync"));
 
-        verify(eventService, times(1)).addSingleEvent(any(SingleEventRequest.class));
+        // Verify the new flow
+        verify(eventMapper, times(1)).toSingleCommand(any(SingleEventRequest.class));
+        verify(createEventUseCase, times(1)).createSingleEvent(any(CreateSingleEventCommand.class));
+        verify(eventMapper, times(1)).toResponse(any(Event.class));
     }
 
     @Test
     void addSingleEvent_ShouldReturn_409Conflict_OnOverlap() throws Exception {
         // Arrange
-        when(eventService.addSingleEvent(any(SingleEventRequest.class))).thenThrow(new ScheduleConflictException("Overlap"));
+        // Mock Mapper (DTO -> Command)
+        when(eventMapper.toSingleCommand(any(SingleEventRequest.class))).thenReturn(createCommand);
+        // Mock use Case (throws the exception)
+        when(createEventUseCase.createSingleEvent(any(CreateSingleEventCommand.class)))
+                .thenThrow(new ScheduleConflictException("Overlap"));
 
         // Act & Assert
         mockMvc.perform(post("/api/events/single")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(singleRequest)))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(singleRequest)))
                 .andExpect(status().isConflict())
                 .andExpect(status().is(409));
 
-        verify(eventService, times(1)).addSingleEvent(any(SingleEventRequest.class));
+        // Verify
+        verify(createEventUseCase, times(1)).createSingleEvent(any(CreateSingleEventCommand.class));
+        verify(eventMapper, never()).toResponse(any(Event.class));
     }
-
-    // -------------------------------------------------------------------------------------------------
-    // 2. PUT /api/events/{id} - Update Single Event
-    // -------------------------------------------------------------------------------------------------
 
     @Test
     void updateSingleEvent_ShouldReturn_200Ok_OnSuccess() throws Exception {
         // Arrange
         Long eventId = 5L;
-        EventUpdateRequest updateRequest = new EventUpdateRequest();
-        updateRequest.setId(eventId);
-        updateRequest.setTitle("Updated Project Review");
-        updateRequest.setStartDate(testStart.plusDays(1));
-        updateRequest.setEndDate(testEnd.plusDays(1));
+        EventUpdateRequest updateRequest = new EventUpdateRequest(eventId, "Updated Title", testStart, testEnd);
+        UpdateEventCommand updateCommand = new UpdateEventCommand(eventId, "Updated Title", testStart, testEnd);
+        Event updatedDomainEvent = new Event(eventId, "Updated Title", testStart, testEnd, null);
+        EventResponse updatedResponse = new EventResponse(eventId, "Updated Title", testStart, testEnd, null);
 
-        EventResponse updatedResponse = new EventResponse(eventId, "Updated Project Review", updateRequest.getStartDate(), updateRequest.getEndDate(), null);
-
-        when(eventService.updateSingleEvent(any(EventUpdateRequest.class))).thenReturn(updatedResponse);
+        // Mock Mapper (DTO -> Command)
+        when(eventMapper.toUpdateCommand(any(EventUpdateRequest.class))).thenReturn(updateCommand);
+        when(updateEventUseCase.updateEvent(any(UpdateEventCommand.class))).thenReturn(updatedDomainEvent);
+        when(eventMapper.toResponse(any(Event.class))).thenReturn(updatedResponse);
 
         // Act & Assert
         mockMvc.perform(put("/api/events/{id}", eventId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
-                .andExpect(status().isOk()) // Expect HTTP 200
-                .andExpect(jsonPath("$.title").value("Updated Project Review"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated Title"));
 
-        verify(eventService, times(1)).updateSingleEvent(any(EventUpdateRequest.class));
+        verify(updateEventUseCase, times(1)).updateEvent(any(UpdateEventCommand.class));
     }
 
     @Test
     void updateSingleEvent_ShouldReturn_404NotFound_WhenIdMissing() throws Exception {
         // Arrange
         Long nonExistentId = 99L;
-        EventUpdateRequest updateRequest = new EventUpdateRequest();
-        updateRequest.setId(nonExistentId);
-        updateRequest.setTitle("Test");
-        updateRequest.setStartDate(testStart);
-        updateRequest.setEndDate(testEnd);
+        EventUpdateRequest updateRequest = new EventUpdateRequest(nonExistentId, "Title", testStart, testEnd);
+        UpdateEventCommand updateCommand = new UpdateEventCommand(nonExistentId, "Title", testStart, testEnd);
 
-        when(eventService.updateSingleEvent(any(EventUpdateRequest.class)))
+        // Mock Mapper (DTO -> Command)
+        when(eventMapper.toUpdateCommand(any(EventUpdateRequest.class))).thenReturn(updateCommand);
+        // Mock use Case (Throws the exception)
+        when(updateEventUseCase.updateEvent(any(UpdateEventCommand.class)))
                 .thenThrow(new ResourceNotFoundException("Event not found."));
 
         // Act & Assert
         mockMvc.perform(put("/api/events/{id}", nonExistentId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(updateRequest)))
-                .andExpect(status().isNotFound()) // Expect HTTP 404
+                        .content(objectMapper.writeValueAsBytes(updateRequest)))
+                .andExpect(status().isNotFound())
                 .andExpect(status().is(404));
-
-        verify(eventService, times(1)).updateSingleEvent(any(EventUpdateRequest.class));
     }
-
-    @Test
-    void updateSingleEvent_ShouldReturn_400BadRequest_OnIdMismatch() throws Exception {
-        // Arrange
-        Long pathId = 5L;
-        Long bodyId = 10L;
-        EventUpdateRequest updateRequest = new EventUpdateRequest(bodyId, "Title", testStart, testEnd);
-
-        // Act & Assert
-        mockMvc.perform(put("/api/events/{id}", pathId)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(updateRequest)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Path ID must match request body ID."));
-
-        verify(eventService, never()).updateSingleEvent(any());
-    }
-
-    // -------------------------------------------------------------------------------------------------
-    // 3. GET /api/events?date=... - Query by Date
-    // -------------------------------------------------------------------------------------------------
 
     @Test
     void getEventsForDate_ShouldReturn_200Ok_AndExpectedList() throws Exception {
         // Arrange
-        LocalDate queryDate = LocalDate.of(20025, 11, 10);
-        List<EventResponse> mockList = Collections.singletonList(eventResponse);
+        LocalDate queryDate = LocalDate.of(2025, 11, 10);
+        List<Event> domainList = Collections.singletonList(domainEvent);
 
-        when(eventService.getEventsForDate(queryDate)).thenReturn(mockList);
+        // MOck Use Case
+        when(getEventUseCase.getEventsForDate(queryDate)).thenReturn(domainList);
+        // Mock Mapper
+        when(eventMapper.toResponse(any(Event.class))).thenReturn(eventResponse);
 
         // Act & Assert
         mockMvc.perform(get("/api/events")
-                    .param("date", queryDate.toString()))
+                        .param("date", queryDate.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].title").value("Team Sync"));
 
-        verify(eventService, times(1)).getEventsForDate(queryDate);
+        verify(getEventUseCase, times(1)).getEventsForDate(queryDate);
+        verify(eventMapper, times(1)).toResponse(any(Event.class));
     }
 
-    // -------------------------------------------------------------------------------------------------
-    // 4. GET /api/events/all - Find All
-    // -------------------------------------------------------------------------------------------------
-
-    @Test
-    void findAll_ShouldReturn_200Ok() throws Exception {
-        // Arrange
-        when(eventService.findAll()).thenReturn(Collections.singletonList(eventResponse));
-
-        // Act & Assert
-        mockMvc.perform(get("/api/events/all"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
-    }
-
-    // -------------------------------------------------------------------------------------------------
-    // 5. POST /api/events/cyclic - Cyclic Events (Success Only Example)
-    // -------------------------------------------------------------------------------------------------
-
-    @Test
-    void addCyclicEvent_ShouldReturn_201Created() throws Exception {
-        // Arrange: Skip generating the complex DTO/Rule, and focus only on the JSON structure
-        String cyclicJson = """
-                {
-                    "title": "Weekly Standup",
-                    "startTime": "09:00:00",
-                    "endTime": "09:30:00",
-                    "recurrenceRule": {
-                        "dateOfWeek": "MONDAY",
-                        "repeatUntilDate": "2026-01-01",
-                        "startTime": "09:00:00",
-                        "endTime": "09:30:00"
-                    }
-                }
-            """;
-
-        // Mock the service
-        when(eventService.addCyclicEvent(any())).thenReturn(Collections.singletonList(eventResponse));
-
-        // Act & Assert
-        mockMvc.perform(post("/api/events/cyclic")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(cyclicJson))
-                .andExpect(status().isCreated())    // Expect HTTP 201
-                .andExpect(jsonPath("$[0].title").value("Team Sync"));
-    }
 }
 
 

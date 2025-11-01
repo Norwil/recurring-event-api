@@ -17,7 +17,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("RecurringEventScheduleAPI")
                         .version("1.0.0")
-                        .description("A Restful API for Event Scheduling for teams.")
+                        .description("A Restful API for EventEntity Scheduling for teams.")
                         .contact(new Contact()
                                 .name("Emre Tokluk")
                                 .email("emretokluk@gmail.com")

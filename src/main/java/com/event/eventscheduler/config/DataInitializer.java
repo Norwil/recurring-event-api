@@ -1,9 +1,9 @@
 package com.event.eventscheduler.config;
 
-import com.event.eventscheduler.entity.Event;
-import com.event.eventscheduler.entity.RecurrenceRule;
-import com.event.eventscheduler.repository.EventRepository;
-import com.event.eventscheduler.repository.RecurrenceRuleRepository;
+import com.event.eventscheduler.adapter.output.persistence.entity.EventEntity;
+import com.event.eventscheduler.adapter.output.persistence.entity.RecurrenceRuleEntity;
+import com.event.eventscheduler.adapter.output.persistence.repository.EventRepository;
+import com.event.eventscheduler.adapter.output.persistence.repository.RecurrenceRuleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -31,19 +31,19 @@ public class DataInitializer {
                 return; // Skip initialization if data exists
             }
 
-            // --- 1. Add Single Event (Fixed Appointment) ---
+            // --- 1. Add Single EventEntity (Fixed Appointment) ---
             addSingleEvent("Project Kickoff",
                     LocalDateTime.now().plusDays(3).withHour(10).withMinute(0),
                     LocalDateTime.now().plusDays(3).withHour(11).withMinute(30));
 
-            // --- 2. Add Cyclic Event (Weekly Standup) ---
+            // --- 2. Add Cyclic EventEntity (Weekly Standup) ---
             addCyclicEvent("Weekly Team Standup",
                     DayOfWeek.MONDAY,
                     LocalTime.of(9, 0),
                     LocalTime.of(9, 30),
                     LocalDate.now().plusMonths(3)); // Repeats for next 3 months
 
-            // --- 3. Add Cyclic Event (Forever Event for Conflict Testing) ---
+            // --- 3. Add Cyclic EventEntity (Forever EventEntity for Conflict Testing) ---
             addCyclicEvent("Lunch Break Conflict",
                     DayOfWeek.FRIDAY,
                     LocalTime.of(12, 0),
@@ -56,17 +56,17 @@ public class DataInitializer {
 
     // Helper method to create and save a single event
     private void addSingleEvent(String title, LocalDateTime start, LocalDateTime end) {
-        Event event = new Event();
-        event.setTitle(title);
-        event.setStartDate(start);
-        event.setEndDate(end);
-        event.setRecurrenceRule(null);
-        eventRepository.save(event);
+        EventEntity eventEntity = new EventEntity();
+        eventEntity.setTitle(title);
+        eventEntity.setStartDate(start);
+        eventEntity.setEndDate(end);
+        eventEntity.setRecurrenceRuleEntity(null);
+        eventRepository.save(eventEntity);
     }
 
     // Helper method to create rule and generate initial events
     private void addCyclicEvent(String title, DayOfWeek day, LocalTime start, LocalTime end, LocalDate repeatUntil) {
-        RecurrenceRule rule = new RecurrenceRule();
+        RecurrenceRuleEntity rule = new RecurrenceRuleEntity();
         rule.setDateOfWeek(day);
         rule.setStartTime(start);
         rule.setEndTime(end);
@@ -75,20 +75,20 @@ public class DataInitializer {
         rule = recurrenceRuleRepository.save(rule);
 
         // Simulate the recurrence logic (similar to EventService.generateEventsFromRule)
-        List<Event> events = new ArrayList<>();
+        List<EventEntity> eventEntities = new ArrayList<>();
         LocalDate today = LocalDate.now();
         LocalDate endExclusive = repeatUntil != null ? repeatUntil.plusDays(1) : today.plusMonths(3);
 
         int count = 0;
-        final int MAX_INIT_EVENTS = 5; // Generate only a few initial events for quick setup
+        final int MAX_INIT_EVENTS = 5; // Generate only a few initial eventEntities for quick setup
 
         for (LocalDate date = today; date.isBefore(endExclusive) && count < MAX_INIT_EVENTS; date = date.plusDays(1)) {
             if (date.getDayOfWeek() == day) {
-                events.add(new Event(null, title, LocalDateTime.of(date, start), LocalDateTime.of(date, end), rule));
+                eventEntities.add(new EventEntity(null, title, LocalDateTime.of(date, start), LocalDateTime.of(date, end), rule));
                 count++;
             }
         }
 
-        eventRepository.saveAll(events);
+        eventRepository.saveAll(eventEntities);
     }
 }
