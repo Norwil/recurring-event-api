@@ -1,11 +1,11 @@
-package com.event.eventscheduler.controller;
+package com.event.eventscheduler.adapter.controller;
 
 import com.event.eventscheduler.adapter.input.rest.controller.EventController;
 import com.event.eventscheduler.adapter.input.rest.dto.request.EventUpdateRequest;
 import com.event.eventscheduler.adapter.input.rest.dto.request.SingleEventRequest;
 import com.event.eventscheduler.adapter.input.rest.dto.response.EventResponse;
 import com.event.eventscheduler.adapter.input.rest.mapper.EventMapper;
-import com.event.eventscheduler.domain.exception.GlobalExceptionHandler;
+import com.event.eventscheduler.adapter.input.rest.exception.GlobalExceptionHandler;
 import com.event.eventscheduler.domain.exception.ResourceNotFoundException;
 import com.event.eventscheduler.domain.exception.ScheduleConflictException;
 import com.event.eventscheduler.domain.model.Event;

@@ -1,4 +1,4 @@
-package com.event.eventscheduler.domain;
+package com.event.eventscheduler.domain.service;
 
 import com.event.eventscheduler.domain.exception.ResourceNotFoundException;
 import com.event.eventscheduler.domain.exception.ScheduleConflictException;
@@ -10,7 +10,6 @@ import com.event.eventscheduler.domain.port.input.command.RecurrenceRuleCommand;
 import com.event.eventscheduler.domain.port.input.command.UpdateEventCommand;
 import com.event.eventscheduler.domain.port.output.EventRepositoryPort;
 import com.event.eventscheduler.domain.port.output.RecurrenceRuleRepositoryPort;
-import com.event.eventscheduler.domain.service.EventService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
