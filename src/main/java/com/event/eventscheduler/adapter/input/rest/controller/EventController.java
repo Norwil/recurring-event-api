@@ -23,6 +23,7 @@ import com.event.eventscheduler.domain.port.input.UpdateEventUseCase;
 // Domain Model
 import com.event.eventscheduler.domain.model.Event;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,7 +47,7 @@ public class EventController {
     private final EventMapper eventMapper;
 
     @PostMapping("/single")
-    public ResponseEntity<EventResponse> addSingleEvent(@RequestBody SingleEventRequest request) {
+    public ResponseEntity<EventResponse> addSingleEvent(@Valid @RequestBody SingleEventRequest request) {
         // Map DTO -> Command
         CreateSingleEventCommand command = eventMapper.toSingleCommand(request);
 
@@ -59,7 +60,7 @@ public class EventController {
     }
 
     @PostMapping("/cyclic")
-    public ResponseEntity<List<EventResponse>> addCyclicEvent(@RequestBody CyclicEventRequest request) {
+    public ResponseEntity<List<EventResponse>> addCyclicEvent(@Valid @RequestBody CyclicEventRequest request) {
         // Map DTO -> Command
         CreateCyclicEventCommand command = eventMapper.toCyclicCommand(request);
 
@@ -104,7 +105,7 @@ public class EventController {
     @PutMapping("/{id}")
     public ResponseEntity<EventResponse> updateSingleEvent(
             @PathVariable Long id,
-            @RequestBody EventUpdateRequest request) {
+           @Valid @RequestBody EventUpdateRequest request) {
 
         if (!id.equals(request.getId())) {
             throw new IllegalArgumentException("Path ID must match request body ID.");
