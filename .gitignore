@@ -43,9 +43,9 @@ logs/
 
 
 # Application Properties
-application*.properties
-application*.yml
-application*.yaml
+# application*.properties
+# application*.yml
+# application*.yaml
 
 
 # Local configuration files
@@ -77,7 +77,7 @@ application*.yaml
 docker-compose.override.yml
 
 # Local development
-src/main/resources/application-*.yml
+#src/main/resources/application-*.yml
 
 # System / Misc
 .DS_Store

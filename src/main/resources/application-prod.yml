@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://db:5432/event_db
+    username: ${POSTGRES_USER:postgres_user}
+    password: ${POSTGRES_PASSWORD:postgres_password}
+    driverClassName: org.postgresql.Driver
+    hikari:
+      pool-name: EventHikariPool
+      maximum-pool-size: 10
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate.hibernate.format_sql: true
+
+logging:
+  level:
+    root: INFO
